@@ -1,0 +1,11 @@
+:host {
+  display: block;
+  margin: 10px;
+}
+
+.button-actions {
+    margin-top: 10px;
+  button:first-child {
+    margin-right: 10px;
+  }
+}
