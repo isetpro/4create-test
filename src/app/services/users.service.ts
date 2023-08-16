@@ -1,6 +1,9 @@
 import { Injectable } from "@angular/core";
+import { Observable, first, map, of, throttleTime } from "rxjs";
 import { IUser } from "../store/user.model";
-import { BehaviorSubject, map, of, throttleTime } from "rxjs";
+import { UsersStore } from "../store/users.store";
+import { UsersQuery } from "../store/user.query";
+import { guid } from "@datorama/akita";
 
 /** Constants used to fill up our data base. */
 
@@ -28,20 +31,27 @@ const NAMES: string[] = [
 
 @Injectable({ providedIn: "root" })
 export class UsersService {
-  users$$ = new BehaviorSubject<IUser[]>([]);
-  get users() {
-    return this.users$$.getValue();
-  }
-  set users(users: IUser[]) {
-    this.users$$.next(users);
+  constructor(private usersStore: UsersStore, private usersQuery: UsersQuery) {
+    this.initUsers();
   }
 
-  initUsers(length = 100) {
+  get users() {
+    return this.usersQuery.getAll();
+  }
+  set users(users: IUser[]) {
+    this.usersStore.set(users);
+  }
+
+  initUsers(length = 3) {
     const users = Array.from({ length }, (_, k) =>
       this.createNewRandomUser(k + 1)
     );
-    this.users = users;
-    return users;
+
+    of(users)
+      .pipe(first(), throttleTime(1000))
+      .subscribe((users) => {
+        this.users = users;
+      });
   }
 
   createNewRandomUser(id: number): IUser {
@@ -52,25 +62,44 @@ export class UsersService {
       ".";
 
     return {
-      id: id.toString(),
-      name: name,
+      id: guid(),
+      name,
       active: Math.round(Math.random()) === 0 ? true : false,
     };
   }
 
-  addUser(user: IUser) {
-    this.users = [
-      { ...user, id: ((Number(this.users.at(-1)?.id) ?? 0) + 1).toString() },
-      ...this.users,
-    ];
-
-    return this.users;
+  changeUser(user: IUser): void {
+    this.usersStore.update(user.id, user);
+    console.log(this.usersQuery.getAll());
   }
 
-  hasUser(name: string) {
+  toggleActive(id: string): void {
+    const user = this.users.find((user) => user.id === id);
+
+    if (user) {
+      return this.changeUser({
+        ...user,
+        active: !user.active,
+      });
+    }
+  }
+
+  hasUser(name: string): Observable<boolean> {
     return of(this.users).pipe(
       throttleTime(1000),
       map((users) => users.some((user) => user.name === name))
     );
+  }
+
+  addUser(user: IUser): void {
+    this.usersStore.add(this.createUser(user.name, user.active));
+  }
+
+  private createUser(name: string, active = false) {
+    return {
+      id: guid(),
+      name,
+      active,
+    } as IUser;
   }
 }

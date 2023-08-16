@@ -2,70 +2,69 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
-  OnInit,
+  OnDestroy,
   ViewChild,
 } from "@angular/core";
+import { MatDialog } from "@angular/material/dialog";
+import { MatPaginator } from "@angular/material/paginator";
 import { MatSort } from "@angular/material/sort";
 import { MatTableDataSource } from "@angular/material/table";
-import { MatPaginator, MatPaginatorModule } from "@angular/material/paginator";
-import { IUser } from "src/app/store/user.model";
-import { MatDialog } from "@angular/material/dialog";
+import { Subject, takeUntil } from "rxjs";
 import { CreateUserDialogComponent } from "src/app/dialogs/create-user-dialog/create-user-dialog.component";
 import { UsersService } from "src/app/services/users.service";
+import { IUser } from "src/app/store/user.model";
+import { UsersQuery } from "src/app/store/user.query";
 @Component({
   selector: "app-table",
   templateUrl: "./table.component.html",
   styleUrls: ["./table.component.scss"],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class TableComponent implements OnInit, AfterViewInit {
+export class TableComponent implements AfterViewInit, OnDestroy {
   @ViewChild(MatPaginator) paginator: MatPaginator | null = null;
   @ViewChild(MatSort) sort: MatSort | null = null;
 
-  displayedColumns: string[] = ["id", "name", "active"];
-  dataSource?: MatTableDataSource<IUser>;
+  dataSource: MatTableDataSource<IUser> = new MatTableDataSource(
+    this.usersQuery.getAll()
+  );
 
-  constructor(public dialog: MatDialog, private userService: UsersService) {}
+  readonly displayedColumns: string[] = ["id", "name", "active"];
+
+  private readonly destroy$$ = new Subject<void>();
+
+  constructor(
+    public dialog: MatDialog,
+    private userService: UsersService,
+    private usersQuery: UsersQuery
+  ) {}
 
   get addUserEnabled() {
     return (
-      this.dataSource &&
       this.dataSource.data.length < 5 &&
       this.dataSource.data.every((user) => user.active)
     );
   }
   ngAfterViewInit() {
-    if (this.dataSource) {
-      this.dataSource.paginator = this.paginator;
-      this.dataSource.sort = this.sort;
-    }
+    this.dataSource.paginator = this.paginator;
+    this.dataSource.sort = this.sort;
   }
 
-  ngOnInit() {
-    // Assign the data to the data source for the table to render
-    const users = this.userService.initUsers(4);
-    this.dataSource = new MatTableDataSource(users);
+  ngOnDestroy(): void {
+    this.destroy$$.next();
+    this.destroy$$.complete();
   }
 
   applyFilter(event: Event) {
-    if (!this.dataSource) {
-      return;
-    }
     const filterValue = (event.target as HTMLInputElement).value;
+
     this.dataSource.filter = filterValue.trim().toLowerCase();
     this.dataSource.paginator?.firstPage();
   }
 
   toggleActive(id: string) {
-    if (!this.dataSource) {
-      return;
-    }
-    const users = this.dataSource.data;
-    const user = users.find((user) => user.id === id);
-    if (user) {
-      user.active = !user.active;
-    }
-    this.dataSource.data = users;
+    this.userService.toggleActive(id);
+
+    this.dataSource.data = this.usersQuery.getAll();
   }
 
   openDialog() {
@@ -76,14 +75,16 @@ export class TableComponent implements OnInit, AfterViewInit {
       width: "450px",
     });
 
-    dialogRef.afterClosed().subscribe((user) => {
-      if (user) {
-        if (!this.dataSource) {
+    dialogRef
+      .afterClosed()
+      .pipe(takeUntil(this.destroy$$))
+      .subscribe((user) => {
+        if (!user) {
           return;
         }
 
-        this.dataSource.data = this.userService.addUser(user);
-      }
-    });
+        this.userService.addUser(user);
+        this.dataSource.data = this.usersQuery.getAll();
+      });
   }
 }
