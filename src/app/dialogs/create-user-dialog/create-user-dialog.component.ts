@@ -1,5 +1,10 @@
 import { CommonModule } from "@angular/common";
-import { Component, OnInit, Inject } from "@angular/core";
+import {
+  Component,
+  OnInit,
+  Inject,
+  ChangeDetectionStrategy,
+} from "@angular/core";
 import {
   FormControl,
   FormGroup,
@@ -22,6 +27,7 @@ export interface CreateUserDialogComponentData {
   selector: "app-create-user-dialog",
   templateUrl: "./create-user-dialog.component.html",
   styleUrls: ["./create-user-dialog.component.scss"],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
   imports: [
     CommonModule,
